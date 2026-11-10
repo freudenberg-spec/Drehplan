@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Drehplan-Generator</title>
+<style>
+/* Layout: links Eingabe-Schritte, rechts mitlaufender Drehplan (Status → Zeitstrahl → Ablauf → Callzeiten). Akzent = Bluescreen-Blau. */
+:root{
+  --bg:#eef0f4; --surface:#ffffff; --surface-2:#f6f7fa; --ink:#141821; --muted:#5b6372; --line:#dce0e7;
+  --accent:#2448d8; --accent-soft:#e3e9fd; --accent-ink:#ffffff;
+  --ok:#17834a; --ok-soft:#e1f4e8; --warn:#a86a00; --warn-soft:#fdf0d6; --bad:#c62839; --bad-soft:#fbe3e6;
+  --c-shot:#2448d8; --c-crew:#4f5869; --c-umbau:#9aa3b2; --c-pause:#7fae86; --c-maske:#b24e93; --c-styling:#16897b; --c-wait:#d9dde5;
+  --f-display:system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --f-body:system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --f-mono:ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r:10px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1218; --surface:#171b23; --surface-2:#1d222c; --ink:#e8ebf1; --muted:#9aa2b1; --line:#2a303c;
+    --accent:#6f8cff; --accent-soft:#1f2a4d; --accent-ink:#0b0f1a;
+    --ok:#4cc27e; --ok-soft:#14301f; --warn:#f0b34a; --warn-soft:#352812; --bad:#ff6b7a; --bad-soft:#3a1a1f;
+    --c-shot:#6f8cff; --c-crew:#7d8799; --c-umbau:#4d5564; --c-pause:#5f9467; --c-maske:#d77bb8; --c-styling:#3fbfae; --c-wait:#2a303c;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1218; --surface:#171b23; --surface-2:#1d222c; --ink:#e8ebf1; --muted:#9aa2b1; --line:#2a303c;
+  --accent:#6f8cff; --accent-soft:#1f2a4d; --accent-ink:#0b0f1a;
+  --ok:#4cc27e; --ok-soft:#14301f; --warn:#f0b34a; --warn-soft:#352812; --bad:#ff6b7a; --bad-soft:#3a1a1f;
+  --c-shot:#6f8cff; --c-crew:#7d8799; --c-umbau:#4d5564; --c-pause:#5f9467; --c-maske:#d77bb8; --c-styling:#3fbfae; --c-wait:#2a303c;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg); color:var(--ink); font-family:var(--f-body); font-size:15px; line-height:1.45}
+h1,h2,h3{font-family:var(--f-display); text-wrap:balance; margin:0; font-weight:700}
+button,input,select,textarea{font:inherit; color:inherit}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.mono,.time{font-family:var(--f-mono); font-variant-numeric:tabular-nums}
+
+/* Kopfzeile */
+.topbar{display:flex; flex-wrap:wrap; align-items:center; gap:12px 20px; padding:14px 24px; background:var(--surface); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5}
+.brand{display:flex; align-items:center; gap:10px}
+.brand-mark{width:30px; height:30px; border-radius:7px; background:var(--accent); display:grid; place-items:center}
+.brand-mark svg{display:block}
+.brand h1{font-size:19px; letter-spacing:-.01em}
+.brand small{display:block; color:var(--muted); font-size:12px; font-family:var(--f-body); font-weight:400}
+.top-actions{margin-left:auto; display:flex; flex-wrap:wrap; gap:8px}
+.btn{border:1px solid var(--line); background:var(--surface); border-radius:8px; padding:7px 12px; cursor:pointer; font-size:14px; font-weight:500}
+.btn:hover{border-color:var(--accent); color:var(--accent)}
+.btn.primary{background:var(--accent); border-color:var(--accent); color:var(--accent-ink)}
+.btn.primary:hover{filter:brightness(1.08); color:var(--accent-ink)}
+.btn.ghost{border-color:transparent; background:transparent; color:var(--muted)}
+.btn.ghost:hover{color:var(--bad)}
+.btn.small{padding:4px 8px; font-size:13px}
+
+/* Grundlayout */
+.shell{display:grid; grid-template-columns:minmax(340px,440px) 1fr; gap:20px; padding:20px 24px 40px; align-items:start}
+@media (max-width:980px){ .shell{grid-template-columns:1fr; padding:16px} }
+.inputs{display:flex; flex-direction:column; gap:14px}
+.output{display:flex; flex-direction:column; gap:14px; position:sticky; top:78px; max-height:calc(100vh - 92px); overflow:auto; padding-bottom:4px}
+@media (max-width:980px){ .output{position:static; max-height:none; overflow:visible} }
+
+.panel{background:var(--surface); border:1px solid var(--line); border-radius:var(--r); padding:16px}
+.panel > header{display:flex; align-items:baseline; gap:10px; margin-bottom:12px}
+.step{font-family:var(--f-mono); font-size:12px; color:var(--accent); font-weight:600}
+.panel h2{font-size:16px}
+.panel .hint{color:var(--muted); font-size:13px; margin:-4px 0 12px}
+
+.grid{display:grid; gap:10px 12px; grid-template-columns:repeat(2,minmax(0,1fr))}
+.grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.full{grid-column:1 / -1}
+@media (max-width:420px){ .grid,.grid.three{grid-template-columns:1fr} }
+.field{display:flex; flex-direction:column; gap:4px; min-width:0}
+.field label{font-size:12.5px; color:var(--muted); font-weight:500}
+.field input,.field select,.field textarea{width:100%; border:1px solid var(--line); background:var(--surface-2); border-radius:7px; padding:7px 9px; min-width:0}
+.field input:focus,.field select:focus{border-color:var(--accent); background:var(--surface); outline:none; box-shadow:0 0 0 3px var(--accent-soft)}
+.field .unit{position:relative}
+.field .unit input{padding-right:40px}
+.field .unit span{position:absolute; right:9px; top:50%; transform:translateY(-50%); font-size:12px; color:var(--muted); pointer-events:none}
+.field input[type="time"],.field input[type="number"]{font-family:var(--f-mono); font-variant-numeric:tabular-nums}
+
+.seg{display:flex; background:var(--surface-2); border:1px solid var(--line); border-radius:8px; padding:3px; gap:3px}
+.seg button{flex:1; border:0; background:transparent; padding:6px 8px; border-radius:6px; cursor:pointer; font-size:13.5px; font-weight:500; color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--surface); color:var(--ink); box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.rule-note{font-size:12.5px; color:var(--muted); margin-top:8px}
+
+/* Personen & Einstellungen */
+.list{display:flex; flex-direction:column; gap:10px}
+.card{border:1px solid var(--line); border-radius:9px; padding:12px; background:var(--surface-2); display:flex; flex-direction:column; gap:10px}
+.card-head{display:flex; align-items:center; gap:8px}
+.badge{font-family:var(--f-mono); font-size:11.5px; font-weight:600; background:var(--accent-soft); color:var(--accent); border-radius:5px; padding:2px 6px}
+.card-head .grow{flex:1; font-weight:600; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.chips{display:flex; flex-wrap:wrap; gap:6px}
+.chip{border:1px solid var(--line); background:var(--surface); border-radius:999px; padding:3px 10px; font-size:13px; cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:var(--accent-ink)}
+.counter{display:flex; align-items:center; gap:8px}
+.counter button{width:32px; height:32px; border-radius:8px; border:1px solid var(--line); background:var(--surface); cursor:pointer; font-size:17px; line-height:1}
+.counter output{font-family:var(--f-mono); font-size:18px; min-width:28px; text-align:center; font-weight:600}
+.add{border:1px dashed var(--line); background:transparent; border-radius:9px; padding:9px; cursor:pointer; color:var(--muted); font-weight:500}
+.add:hover{border-color:var(--accent); color:var(--accent)}
+
+/* Ausgabe */
+.sheet-head{display:flex; flex-wrap:wrap; gap:6px 16px; align-items:flex-end; justify-content:space-between}
+.sheet-head h2{font-size:24px; letter-spacing:-.015em}
+.sheet-meta{color:var(--muted); font-size:13.5px}
+.status{display:inline-flex; align-items:center; gap:7px; border-radius:999px; padding:5px 12px; font-weight:600; font-size:13.5px}
+.status::before{content:""; width:9px; height:9px; border-radius:50%; background:currentColor}
+.status.ok{background:var(--ok-soft); color:var(--ok)}
+.status.warn{background:var(--warn-soft); color:var(--warn)}
+.status.bad{background:var(--bad-soft); color:var(--bad)}
+
+.tiles{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:14px}
+@media (max-width:640px){ .tiles{grid-template-columns:repeat(2,minmax(0,1fr))} }
+.tile{background:var(--surface-2); border:1px solid var(--line); border-radius:9px; padding:10px 12px}
+.tile .k{font-size:12px; color:var(--muted)}
+.tile .v{font-family:var(--f-mono); font-size:22px; font-weight:600; font-variant-numeric:tabular-nums; margin-top:2px}
+.tile .s{font-size:12px; color:var(--muted)}
+
+.checks{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px}
+.checks li{display:grid; grid-template-columns:4px 1fr; gap:10px; background:var(--surface-2); border-radius:7px; padding:8px 10px 8px 0; font-size:13.5px; overflow:hidden}
+.checks li::before{content:""; border-radius:0 3px 3px 0}
+.checks li.ok::before{background:var(--ok)} .checks li.warn::before{background:var(--warn)} .checks li.bad::before{background:var(--bad)} .checks li.info::before{background:var(--c-umbau)}
+.checks b{font-weight:600}
+
+/* Zeitstrahl */
+.gantt-wrap{overflow-x:auto}
+.gantt{min-width:640px; display:grid; grid-template-columns:120px 1fr; row-gap:6px; font-size:12.5px}
+.g-label{display:flex; align-items:center; color:var(--muted); padding-right:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.g-label.team{color:var(--ink); font-weight:600}
+.g-track{position:relative; height:26px; background:var(--surface-2); border-radius:5px}
+.g-axis{position:relative; height:18px}
+.g-axis span{position:absolute; transform:translateX(-50%); font-family:var(--f-mono); font-size:11px; color:var(--muted)}
+.g-grid{position:absolute; inset:0; pointer-events:none}
+.g-grid i{position:absolute; top:0; bottom:0; width:1px; background:var(--line)}
+.g-b{position:absolute; top:3px; bottom:3px; border-radius:4px; min-width:2px; overflow:hidden; color:#fff; font-size:11px; line-height:20px; padding:0 5px; white-space:nowrap; text-overflow:ellipsis}
+.g-b.shot{background:var(--c-shot)}
+.g-b.aufbau,.g-b.abbau{background:var(--c-crew)}
+.g-b.umbau{background:repeating-linear-gradient(135deg,var(--c-umbau) 0 5px,transparent 5px 9px); border:1px solid var(--c-umbau); color:var(--ink)}
+.g-b.pause{background:var(--c-pause)}
+.g-b.maske{background:var(--c-maske)}
+.g-b.styling{background:var(--c-styling)}
+.g-b.wait{background:var(--c-wait); color:var(--muted)}
+.g-b.set{background:transparent; border:1.5px solid var(--c-shot); color:var(--ink)}
+.g-b.inshot{background:var(--c-shot); top:9px; bottom:9px; padding:0; border-radius:2px}
+.legend{display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:10px; font-size:12px; color:var(--muted)}
+.legend span{display:inline-flex; align-items:center; gap:6px}
+.legend i{width:14px; height:10px; border-radius:3px; display:inline-block}
+
+table{width:100%; border-collapse:collapse; font-size:13.5px}
+.table-wrap{overflow-x:auto}
+th{text-align:left; font-weight:600; font-size:12px; color:var(--muted); padding:6px 8px; border-bottom:1px solid var(--line); white-space:nowrap}
+td{padding:7px 8px; border-bottom:1px solid var(--line); vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.time{white-space:nowrap}
+.tag{display:inline-block; font-size:11px; font-weight:600; border-radius:4px; padding:1px 6px; margin-right:6px; vertical-align:1px}
+.tag.shot{background:var(--accent-soft); color:var(--accent)}
+.tag.pause{background:var(--ok-soft); color:var(--ok)}
+.tag.umbau,.tag.aufbau,.tag.abbau{background:var(--surface-2); color:var(--muted); border:1px solid var(--line)}
+tr.pause td{background:var(--ok-soft)}
+.who{color:var(--muted); font-size:12.5px}
+.flag{color:var(--bad); font-weight:600}
+
+/* Dialog */
+.modal{position:fixed; inset:0; background:rgba(10,12,18,.45); display:none; align-items:center; justify-content:center; padding:16px; z-index:20}
+.modal.open{display:flex}
+.modal .box{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:18px; width:min(640px,100%); display:flex; flex-direction:column; gap:12px}
+.modal textarea{width:100%; min-height:260px; border:1px solid var(--line); border-radius:8px; padding:10px; background:var(--surface-2); font-family:var(--f-mono); font-size:12.5px}
+.modal .row{display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap}
+.toast{position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--bg); padding:8px 14px; border-radius:8px; font-size:13.5px; opacity:0; transition:opacity .2s; pointer-events:none; z-index:30}
+.toast.show{opacity:1}
+@media (prefers-reduced-motion: reduce){ .toast{transition:none} }
+.foot{color:var(--muted); font-size:12px}
+
+/* Adresssuche */
+.search-row{display:flex; gap:8px}
+.search-row input{flex:1}
+.suggest{border:1px solid var(--line); border-left:3px solid var(--accent); background:var(--surface-2); border-radius:8px; padding:10px 12px; font-size:13.5px; display:flex; flex-direction:column; gap:8px}
+.suggest .src{font-size:12px; color:var(--muted)}
+.suggest .src.claude{color:var(--warn); font-weight:600}
+.suggest .row{display:flex; flex-wrap:wrap; gap:8px; align-items:center}
+.suggest a{color:var(--accent)}
+
+/* Motiv-Karte */
+.upload-row{display:flex; flex-wrap:wrap; align-items:center; gap:8px}
+.upload-row input[type="file"]{font-size:13px; min-width:0; flex:1}
+.loc{display:grid; grid-template-columns:200px 1fr; gap:16px; align-items:stretch; padding:12px}
+@media (max-width:560px){ .loc{grid-template-columns:1fr} }
+.loc-map{position:relative; border-radius:8px; overflow:hidden; min-height:130px; background:var(--surface-2); border:1px solid var(--line)}
+.loc-map img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block}
+.loc-map.empty{background:
+  linear-gradient(var(--line) 1px, transparent 1px) 0 0/22px 22px,
+  linear-gradient(90deg, var(--line) 1px, transparent 1px) 0 0/22px 22px, var(--surface-2);
+  display:grid; place-items:center; cursor:pointer; color:var(--muted); font-size:12.5px; text-align:center; padding:10px}
+.loc-map.empty:hover{color:var(--accent)}
+.loc-pin{display:flex; flex-direction:column; align-items:center; gap:6px}
+.loc-pin svg{display:block}
+.loc-info{display:flex; flex-direction:column; gap:6px; justify-content:center; min-width:0}
+.loc-info .k{font-size:12px; color:var(--muted)}
+.loc-info h3{font-size:18px}
+.loc-info .addr{overflow-wrap:anywhere}
+.loc-links{display:flex; flex-wrap:wrap; gap:8px; margin-top:4px}
+.loc-links a{text-decoration:none}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark" aria-hidden="true">
+      <svg width="18" height="18" viewBox="0 0 18 18"><rect x="1" y="6" width="16" height="11" rx="1.5" fill="#fff"/><path d="M1 5 L16 1.5 L16.6 4 L1.6 7.5Z" fill="#fff" opacity=".85"/></svg>
+    </div>
+    <div><h1>Drehplan-Generator</h1><small>Shooting Schedule für Werbe- und Imagedrehs</small></div>
+  </div>
+  <div class="top-actions">
+    <button class="btn" id="btn-example" type="button">Beispiel laden</button>
+    <button class="btn" id="btn-new" type="button">Neuer Plan</button>
+    <button class="btn" id="btn-io" type="button">Speichern / Laden</button>
+    <button class="btn primary" id="btn-copy" type="button">Drehplan als Text kopieren</button>
+  </div>
+</header>
+
+<main class="shell">
+  <!-- EINGABEN -->
+  <section class="inputs" aria-label="Eingaben">
+
+    <div class="panel">
+      <header><span class="step">01</span><h2>Produktion</h2></header>
+      <div class="grid">
+        <div class="field full"><label for="m-produktion">Produktion / Spot</label><input id="m-produktion" data-k="meta.produktion"></div>
+        <div class="field"><label for="m-kunde">Kunde / Agentur</label><input id="m-kunde" data-k="meta.kunde"></div>
+        <div class="field"><label for="m-datum">Drehdatum</label><input id="m-datum" type="date" data-k="meta.datum"></div>
+        <div class="field"><label for="m-tag">Drehtag</label><input id="m-tag" type="number" min="1" data-k="meta.tag" data-num></div>
+        <div class="field"><label for="m-tage">von insgesamt</label><input id="m-tage" type="number" min="1" data-k="meta.tage" data-num></div>
+        <div class="field full"><label for="m-motivname">Motiv / Studio</label>
+          <div class="search-row">
+            <input id="m-motivname" data-k="meta.motivName" list="motiv-list" autocomplete="off" placeholder="z. B. Studio Hamburg Atelier 5, Hamburg">
+            <button class="btn small" type="button" id="m-find">Adresse finden</button>
+          </div>
+          <datalist id="motiv-list"></datalist>
+        </div>
+        <div class="suggest full" id="motiv-suggest" hidden></div>
+        <div class="field full"><label for="m-motiv">Adresse</label><input id="m-motiv" data-k="meta.motiv" placeholder="Straße, PLZ Ort"></div>
+        <div class="field full">
+          <label for="m-karte">Kartenausschnitt (optional, Screenshot aus Google Maps o. Ä.)</label>
+          <div class="upload-row">
+            <input id="m-karte" type="file" accept="image/*">
+            <button class="btn ghost small" type="button" id="m-karte-del">Bild entfernen</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <header><span class="step">02</span><h2>Drehzeiten &amp; Regelwerk</h2></header>
+      <div class="grid">
+        <div class="field"><label for="z-call">Drehbeginn (Crew-Call)</label><input id="z-call" type="time" data-k="zeiten.crewCall"></div>
+        <div class="field"><label for="z-ende">Geplantes Drehende</label><input id="z-ende" type="time" data-k="zeiten.drehschluss"></div>
+        <div class="field"><label for="z-aufbau">Aufbau vor 1. Einstellung</label><div class="unit"><input id="z-aufbau" type="number" min="0" step="5" data-k="zeiten.aufbau" data-num><span>min</span></div></div>
+        <div class="field"><label for="z-abbau">Abbau nach Drehschluss</label><div class="unit"><input id="z-abbau" type="number" min="0" step="5" data-k="zeiten.abbau" data-num><span>min</span></div></div>
+        <div class="field"><label for="z-pause">Mittagspause</label><div class="unit"><input id="z-pause" type="number" min="30" step="5" data-k="pause.mittag" data-num><span>min</span></div></div>
+        <div class="field"><label for="z-puffer">Puffer auf Drehzeiten</label><div class="unit"><input id="z-puffer" type="number" min="0" max="50" step="5" data-k="puffer" data-num><span>%</span></div></div>
+        <div class="field full"><label for="z-vortag">Drehschluss am Vortag (optional, für Ruhezeit-Check)</label><input id="z-vortag" type="time" data-k="zeiten.vortag"></div>
+        <div class="field full">
+          <label id="rule-label">Regelwerk Arbeitszeit</label>
+          <div class="seg" role="group" aria-labelledby="rule-label">
+            <button type="button" data-rule="arbzg">ArbZG</button>
+            <button type="button" data-rule="tvffs">TV FFS</button>
+            <button type="button" data-rule="custom">Eigene Grenze</button>
+          </div>
+          <div class="field" id="custom-wrap" style="margin-top:8px"><label for="z-custom">Max. Arbeitszeit pro Tag</label><div class="unit"><input id="z-custom" type="number" min="1" max="16" step="0.5" data-k="customMax" data-num><span>h</span></div></div>
+          <div class="rule-note" id="rule-note"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <header><span class="step">03</span><h2>Maske &amp; Styling</h2></header>
+      <p class="hint">Standardwerte für alle Protagonisten. Pro Person lässt sich das unten anpassen.</p>
+      <div class="grid">
+        <div class="field"><label for="t-maske">Zeit für Visagistin</label><div class="unit"><input id="t-maske" type="number" min="0" step="5" data-k="team.maskeStd" data-num data-std="maske"><span>min</span></div></div>
+        <div class="field"><label for="t-styling">Zeit für Styling</label><div class="unit"><input id="t-styling" type="number" min="0" step="5" data-k="team.stylingStd" data-num data-std="styling"><span>min</span></div></div>
+        <div class="field"><label for="t-visa">Anzahl Visagist:innen</label><input id="t-visa" type="number" min="1" max="10" data-k="team.visagisten" data-num></div>
+        <div class="field"><label for="t-styl">Anzahl Stylist:innen</label><input id="t-styl" type="number" min="1" max="10" data-k="team.stylisten" data-num></div>
+        <div class="field"><label for="t-ank">Ankommen &amp; Kaffee</label><div class="unit"><input id="t-ank" type="number" min="0" step="5" data-k="team.ankunftPuffer" data-num><span>min</span></div></div>
+        <div class="field"><label for="t-set">Puffer bis „am Set“</label><div class="unit"><input id="t-set" type="number" min="0" step="5" data-k="team.setPuffer" data-num><span>min</span></div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <header><span class="step">04</span><h2>Protagonisten</h2></header>
+      <div class="counter" style="margin-bottom:12px">
+        <button type="button" id="p-minus" aria-label="Einen Protagonisten entfernen">−</button>
+        <output id="p-count">0</output>
+        <button type="button" id="p-plus" aria-label="Einen Protagonisten hinzufügen">+</button>
+        <span class="hint" style="margin:0">Ankunftszeiten werden automatisch berechnet.</span>
+      </div>
+      <div class="list" id="people"></div>
+    </div>
+
+    <div class="panel">
+      <header><span class="step">05</span><h2>Umbauzeiten</h2></header>
+      <div class="grid three">
+        <div class="field"><label for="u-licht">Lichtumbau</label><div class="unit"><input id="u-licht" type="number" min="0" step="5" data-k="umbau.licht" data-num><span>min</span></div></div>
+        <div class="field"><label for="u-set">Setwechsel</label><div class="unit"><input id="u-set" type="number" min="0" step="5" data-k="umbau.set" data-num><span>min</span></div></div>
+        <div class="field"><label for="u-motiv">Motivwechsel</label><div class="unit"><input id="u-motiv" type="number" min="0" step="5" data-k="umbau.motiv" data-num><span>min</span></div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <header><span class="step">06</span><h2>Einstellungen in Drehreihenfolge</h2></header>
+      <p class="hint">Dauer ohne Puffer. Der Umbau wird vor der Einstellung eingeplant.</p>
+      <div class="list" id="shots"></div>
+      <button class="add" type="button" id="shot-add" style="margin-top:10px">+ Einstellung hinzufügen</button>
+    </div>
+
+    <p class="foot">Die Prüfungen sind eine Planungshilfe und ersetzen keine Rechtsberatung. Grenzwerte: ArbZG §§ 3–5, TV FFS (Fassung 10/2024), JArbSchG § 6. Für Kinder unter 15 braucht es immer eine behördliche Genehmigung.</p>
+  </section>
+
+  <!-- AUSGABE -->
+  <section class="output" aria-label="Drehplan">
+    <div class="panel">
+      <div class="sheet-head">
+        <div>
+          <h2 id="o-title">Drehplan</h2>
+          <div class="sheet-meta" id="o-meta"></div>
+        </div>
+        <span class="status ok" id="o-status">Plan ok</span>
+      </div>
+      <div class="tiles" id="o-tiles"></div>
+    </div>
+
+    <div class="panel loc" id="o-loc"></div>
+
+    <div class="panel">
+      <header><h2>Prüfungen</h2></header>
+      <ul class="checks" id="o-checks"></ul>
+    </div>
+
+    <div class="panel">
+      <header><h2>Callzeiten Protagonisten</h2></header>
+      <div class="table-wrap"><table id="o-calls"></table></div>
+    </div>
+
+    <div class="panel">
+      <header><h2>Tagesablauf</h2></header>
+      <div class="table-wrap"><table id="o-ablauf"></table></div>
+    </div>
+  </section>
+</main>
+
+<div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="box">
+    <h3 id="modal-title">Plan speichern oder laden</h3>
+    <p class="hint" style="margin:0">Zum Speichern den Text kopieren und z. B. in einer Notiz ablegen. Zum Laden einen gespeicherten Text einfügen und „Plan laden“ wählen.</p>
+    <label for="modal-text" class="hint" style="margin:0">Plan-Daten</label>
+    <textarea id="modal-text" spellcheck="false"></textarea>
+    <div class="row">
+      <button class="btn" type="button" id="modal-close">Schließen</button>
+      <button class="btn" type="button" id="modal-copy">Text kopieren</button>
+      <button class="btn primary" type="button" id="modal-load">Plan laden</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script id="logic">
+/* ---------- Reine Planungslogik ---------- */
+var RULES = {
+  arbzg: {name:"ArbZG", warn:480, max:600, note:"Arbeitszeitgesetz: 8 h pro Werktag, bis 10 h nur mit Ausgleich auf durchschnittlich 8 h. Pausen 30 min ab 6 h, 45 min ab 9 h, nie mehr als 6 h am Stück. 11 h Ruhezeit."},
+  tvffs: {name:"TV FFS", warn:600, max:720, note:"Tarifvertrag Film- und Fernsehschaffende (Fassung 10/2024): höchstens 12 h pro Tag und 60 h pro Woche. Gilt nur für tarifgebundene Produktionen."},
+  custom:{name:"Eigene Grenze", warn:null, max:null, note:"Eigene Tagesgrenze, z. B. nach Vertrag. Pausen und Ruhezeit werden weiter nach ArbZG geprüft."}
+};
+function toMin(t){ if(!t) return null; var p=String(t).split(":"); return (+p[0])*60+(+p[1]); }
+function fmt(m){ if(m==null||isNaN(m)) return "–"; m=Math.round(m); var d=((m%1440)+1440)%1440; var h=Math.floor(d/60), mi=d%60; return (h<10?"0":"")+h+":"+(mi<10?"0":"")+mi; }
+function dur(m){ m=Math.round(m); var h=Math.floor(Math.abs(m)/60), mi=Math.abs(m)%60; return (m<0?"−":"")+h+":"+(mi<10?"0":"")+mi+" h"; }
+function num(v,d){ v=Number(v); return isFinite(v)?v:d; }
+
+function buildDay(s, lunchDur){
+  var t0=toMin(s.zeiten.crewCall)||420, cursor=t0, stretch=0, lunchDone=false, blocks=[], LIMIT=360;
+  function pause(){ var d=lunchDone?15:lunchDur; blocks.push({typ:"pause",name:lunchDone?"Kurze Pause":"Mittagspause / Catering",start:cursor,end:cursor+d}); cursor+=d; stretch=0; lunchDone=true; }
+  var auf=num(s.zeiten.aufbau,0);
+  if(auf>0){ blocks.push({typ:"aufbau",name:"Aufbau Licht, Kamera, Ton",start:cursor,end:cursor+auf}); cursor+=auf; stretch+=auf; }
+  var fac=1+num(s.puffer,0)/100;
+  s.shots.forEach(function(sh,i){
+    var u = i===0?0:num(s.umbau[sh.umbau],0);
+    var d = Math.round(num(sh.dauer,0)*fac/5)*5;
+    if(stretch>0 && stretch+u+d>LIMIT) pause();
+    if(u>0){ var lab={licht:"Lichtumbau",set:"Setwechsel",motiv:"Motivwechsel"}[sh.umbau]||"Umbau"; blocks.push({typ:"umbau",name:lab,start:cursor,end:cursor+u}); cursor+=u; stretch+=u; }
+    blocks.push({typ:"shot",name:sh.name||("Einstellung "+(i+1)),nr:i+1,shot:sh,start:cursor,end:cursor+d,personen:sh.personen.slice()}); cursor+=d; stretch+=d;
+  });
+  var ab=num(s.zeiten.abbau,0);
+  if(ab>0){ if(stretch>0 && stretch+ab>LIMIT) pause(); blocks.push({typ:"abbau",name:"Abbau",start:cursor,end:cursor+ab}); cursor+=ab; }
+  var pauses=blocks.filter(function(b){return b.typ==="pause";}).reduce(function(a,b){return a+b.end-b.start;},0);
+  var drehEnde = (function(){ var sh=blocks.filter(function(b){return b.typ==="shot";}); return sh.length?sh[sh.length-1].end:cursor; })();
+  return {t0:t0, wrap:cursor, drehEnde:drehEnde, blocks:blocks, pauses:pauses, work:cursor-t0-pauses};
+}
+
+function requiredPause(work){ return work>540?45:(work>360?30:0); }
+
+function scheduleBack(items, key, slotsN){
+  // items: {id, idealEnd, dur} → start/end je Person, rückwärts mit begrenzter Anzahl Kräfte
+  var slots=[]; for(var i=0;i<Math.max(1,slotsN);i++) slots.push(Infinity);
+  var res={};
+  items.slice().sort(function(a,b){return b.idealEnd-a.idealEnd;}).forEach(function(it){
+    if(it.dur<=0){ res[it.id]={start:it.idealEnd,end:it.idealEnd}; return; }
+    var bi=0; for(var j=1;j<slots.length;j++) if(slots[j]>slots[bi]) bi=j;
+    var end=Math.min(it.idealEnd, slots[bi]); var start=end-it.dur; slots[bi]=start;
+    res[it.id]={start:start,end:end};
+  });
+  return res;
+}
+
+function kidRule(age){
+  if(age==null||age==="") return null; age=Number(age);
+  if(age<3) return {forbidden:true, label:"unter 3 Jahren"};
+  if(age<6) return {from:480,to:1020,max:120,label:"3–6 Jahre",perm:true};
+  if(age<15) return {from:480,to:1320,max:180,label:"6–14 Jahre",perm:true};
+  if(age<18) return {from:0,to:1380,max:480,label:"Jugendliche/r 15–17",perm:false};
+  return null;
+}
+
+function computePlan(s){
+  var lunch=Math.max(30,num(s.pause.mittag,45));
+  var day=buildDay(s,lunch);
+  var req=requiredPause(day.work);
+  if(day.pauses<req){ day=buildDay(s, lunch+(req-day.pauses)); }
+  var shots=day.blocks.filter(function(b){return b.typ==="shot";});
+  var setP=num(s.team.setPuffer,0), ankP=num(s.team.ankunftPuffer,0);
+  var people=s.personen.map(function(p){
+    var mine=shots.filter(function(b){return b.personen.indexOf(p.id)>=0;});
+    return {p:p, shots:mine, first:mine.length?mine[0].start:null, last:mine.length?mine[mine.length-1].end:null};
+  });
+  var active=people.filter(function(x){return x.first!=null;});
+  var sty=scheduleBack(active.map(function(x){return {id:x.p.id, idealEnd:x.first-setP, dur:num(x.p.styling,0)};}), "styling", num(s.team.stylisten,1));
+  var mas=scheduleBack(active.map(function(x){return {id:x.p.id, idealEnd:sty[x.p.id].start, dur:num(x.p.maske,0)};}), "maske", num(s.team.visagisten,1));
+  active.forEach(function(x){
+    x.styling=sty[x.p.id]; x.maske=mas[x.p.id];
+    x.callCalc=x.maske.start-ankP;
+    var man=toMin(x.p.ankunft);
+    x.call = man!=null ? man : x.callCalc;
+    x.late = man!=null && man>x.callCalc;
+    x.release=x.last;
+    x.presence=x.release-x.call;
+  });
+  // Prüfungen
+  var checks=[], rule=RULES[s.regel]||RULES.arbzg;
+  var maxW = s.regel==="custom" ? num(s.customMax,10)*60 : rule.max;
+  var warnW = s.regel==="custom" ? null : rule.warn;
+  if(day.work>maxW) checks.push({lvl:"bad", t:"<b>Arbeitszeit "+dur(day.work)+"</b> überschreitet die Grenze von "+dur(maxW)+" ("+rule.name+"). Einstellungen kürzen oder auf einen weiteren Drehtag legen."});
+  else if(warnW && day.work>warnW) checks.push({lvl:"warn", t:"<b>Arbeitszeit "+dur(day.work)+"</b>: über "+dur(warnW)+". Nach "+rule.name+" zulässig, braucht aber Ausgleich an anderen Tagen."});
+  else checks.push({lvl:"ok", t:"<b>Arbeitszeit "+dur(day.work)+"</b> liegt innerhalb der Grenze ("+rule.name+", max. "+dur(maxW)+")."});
+  checks.push({lvl:"ok", t:"<b>Pausen "+day.pauses+" min</b> eingeplant, kein Block länger als 6 h am Stück (§ 4 ArbZG)."});
+  var plannedEnd=toMin(s.zeiten.drehschluss);
+  if(plannedEnd!=null){
+    var pe=plannedEnd; if(pe<=day.t0) pe+=1440;
+    var diff=day.wrap-pe;
+    if(diff>0) checks.push({lvl:"bad", t:"<b>Plan überzieht um "+diff+" min.</b> Drehschluss inkl. Abbau "+fmt(day.wrap)+", geplant war "+fmt(pe)+"."});
+    else checks.push({lvl:"ok", t:"<b>"+(-diff)+" min Reserve</b> bis zum geplanten Drehende "+fmt(pe)+"."});
+  }
+  var vt=toMin(s.zeiten.vortag);
+  if(vt!=null){
+    var gap=day.t0+1440-vt; if(gap>1440) gap-=1440;
+    if(gap<660) checks.push({lvl:"bad", t:"<b>Ruhezeit nur "+dur(gap)+"</b> seit Drehschluss am Vortag ("+fmt(vt)+"). Nötig sind 11 h, also Crew-Call frühestens "+fmt(vt+660)+"."});
+    else checks.push({lvl:"ok", t:"<b>Ruhezeit "+dur(gap)+"</b> seit dem Vortag eingehalten."});
+  }
+  checks.push({lvl:"info", t:"Frühester Crew-Call am Folgetag: <b>"+fmt(day.wrap+660)+"</b> (11 h Ruhezeit)."});
+  people.forEach(function(x){
+    var name=x.p.name||"Ohne Namen";
+    if(x.first==null){ checks.push({lvl:"warn", t:"<b>"+name+"</b> ist in keiner Einstellung eingeplant."}); return; }
+    if(x.late) checks.push({lvl:"bad", t:"<b>"+name+"</b> kommt um "+fmt(toMin(x.p.ankunft))+", müsste für Maske und Styling aber spätestens "+fmt(x.callCalc)+" da sein."});
+    var k=kidRule(x.p.alter);
+    if(k){
+      if(k.forbidden){ checks.push({lvl:"bad", t:"<b>"+name+"</b> ("+k.label+"): Beschäftigung bei Dreharbeiten nicht zulässig."}); return; }
+      var probs=[];
+      var cs=((x.call%1440)+1440)%1440, re=cs+x.presence;
+      if(cs<k.from) probs.push("Ankunft "+fmt(x.call)+" vor "+fmt(k.from));
+      if(re>k.to) probs.push("frei erst "+fmt(x.release)+", erlaubt bis "+fmt(k.to));
+      if(x.presence>k.max) probs.push("anwesend "+dur(x.presence)+", erlaubt "+dur(k.max));
+      if(probs.length) checks.push({lvl:"bad", t:"<b>"+name+"</b> ("+k.label+"): "+probs.join("; ")+". Maske und Wartezeit zählen mit."});
+      else checks.push({lvl:"ok", t:"<b>"+name+"</b> ("+k.label+"): Zeitfenster und Höchstdauer eingehalten."});
+      if(k.perm) checks.push({lvl:"warn", t:"<b>"+name+"</b>: Behördliche Genehmigung nach § 6 JArbSchG nötig (Antrag rechtzeitig bei der Aufsichtsbehörde stellen)."});
+    } else if(x.presence-30>maxW){
+      checks.push({lvl:"warn", t:"<b>"+name+"</b> ist "+dur(x.presence)+" am Set. Prüfen, ob Einstellungen mit dieser Person zusammengelegt werden können."});
+    }
+  });
+  var order={bad:3,warn:2,ok:1,info:0};
+  var worst=checks.reduce(function(a,c){return order[c.lvl]>order[a]?c.lvl:a;},"ok");
+  return {day:day, people:people, active:active, checks:checks, worst:worst, maxW:maxW};
+}
+</script>
+
+<script>
+/* ---------- Zustand ---------- */
+var uid=function(){ return Math.random().toString(36).slice(2,9); };
+function example(){
+  var a=uid(), b=uid(), c=uid();
+  return {
+    meta:{produktion:"Ferrero Rocher – Weihnachtsspot 30s", kunde:"Ferrero Deutschland", datum:"2026-11-24", tag:1, tage:1, motivName:"Studio Elbblick, Atelier 2", motiv:"Hafenstraße 12, 20359 Hamburg", karte:""},
+    zeiten:{crewCall:"07:00", drehschluss:"18:00", aufbau:60, abbau:30, vortag:""},
+    regel:"arbzg", customMax:10, puffer:10, pause:{mittag:45},
+    team:{maskeStd:45, stylingStd:30, visagisten:2, stylisten:1, ankunftPuffer:15, setPuffer:10},
+    umbau:{licht:20, set:30, motiv:60},
+    personen:[
+      {id:a, name:"Anna Kessler", rolle:"Hauptdarstellerin", alter:"", maske:60, styling:30, ankunft:""},
+      {id:b, name:"Markus Weber", rolle:"Partner", alter:"", maske:30, styling:25, ankunft:""},
+      {id:c, name:"Sophie Lang", rolle:"Hand-Model", alter:"", maske:20, styling:10, ankunft:""}
+    ],
+    shots:[
+      {id:uid(), name:"Totale Wohnzimmer: Paar am Kamin, Weihnachtsdeko", dauer:60, umbau:"keiner", personen:[a,b]},
+      {id:uid(), name:"Halbnah: Anna öffnet die goldene Schachtel", dauer:45, umbau:"licht", personen:[a]},
+      {id:uid(), name:"Gegenschuss: Paar teilt eine Praline, lacht", dauer:45, umbau:"licht", personen:[a,b]},
+      {id:uid(), name:"Close-up: Markus' Reaktion", dauer:30, umbau:"licht", personen:[b]},
+      {id:uid(), name:"Hand-Insert: Praline aus der Schachtel nehmen", dauer:45, umbau:"set", personen:[c]},
+      {id:uid(), name:"Tabletop Slow-Motion: Praline bricht auf (Food-Styling)", dauer:45, umbau:"licht", personen:[]},
+      {id:uid(), name:"Packshot Endframe: Schachtel mit Logo", dauer:30, umbau:"set", personen:[]}
+    ]
+  };
+}
+function blank(){
+  return {meta:{produktion:"",kunde:"",datum:"",tag:1,tage:1,motivName:"",motiv:"",karte:""}, zeiten:{crewCall:"07:00",drehschluss:"18:00",aufbau:60,abbau:45,vortag:""},
+    regel:"arbzg", customMax:10, puffer:10, pause:{mittag:45},
+    team:{maskeStd:45,stylingStd:30,visagisten:1,stylisten:1,ankunftPuffer:15,setPuffer:10}, umbau:{licht:20,set:40,motiv:60},
+    personen:[], shots:[{id:uid(),name:"",dauer:60,umbau:"licht",personen:[]}]};
+}
+var KEY="drehplan-generator-v2", S;
+try{ var raw=localStorage.getItem(KEY); S = raw?JSON.parse(raw):example(); }catch(e){ S=example(); }
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
+function getK(path){ return path.split(".").reduce(function(o,k){return o?o[k]:undefined;},S); }
+function setK(path,v){ var ks=path.split("."), o=S; for(var i=0;i<ks.length-1;i++) o=o[ks[i]]; o[ks[ks.length-1]]=v; }
+function esc(t){ return String(t==null?"":t).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];}); }
+var $=function(id){return document.getElementById(id);};
+
+/* ---------- Eingaben ---------- */
+function bindStatic(){
+  document.querySelectorAll("[data-k]").forEach(function(el){
+    var v=getK(el.dataset.k); el.value = v==null?"":v;
+    el.oninput=function(){
+      var nv = el.hasAttribute("data-num") ? (el.value===""?0:Number(el.value)) : el.value;
+      var old=getK(el.dataset.k);
+      setK(el.dataset.k, nv);
+      if(el.dataset.std){ // Standardwert auf Personen übertragen, die noch den alten Standard hatten
+        S.personen.forEach(function(p){ if(Number(p[el.dataset.std])===Number(old)) p[el.dataset.std]=nv; });
+        renderPeople();
+      }
+      update();
+    };
+  });
+  document.querySelectorAll("[data-rule]").forEach(function(b){
+    b.onclick=function(){ S.regel=b.dataset.rule; renderRule(); update(); };
+  });
+  renderRule();
+}
+function renderRule(){
+  document.querySelectorAll("[data-rule]").forEach(function(b){ b.setAttribute("aria-pressed", String(b.dataset.rule===S.regel)); });
+  $("custom-wrap").style.display = S.regel==="custom"?"flex":"none";
+  $("rule-note").textContent = RULES[S.regel].note;
+}
+
+function renderPeople(){
+  $("p-count").textContent=S.personen.length;
+  var box=$("people");
+  if(!S.personen.length){ box.innerHTML='<p class="hint" style="margin:0">Noch keine Protagonisten. Mit + hinzufügen.</p>'; return; }
+  box.innerHTML=S.personen.map(function(p,i){
+    var id=p.id;
+    return '<div class="card" data-pid="'+id+'">'+
+      '<div class="card-head"><span class="badge">P'+(i+1)+'</span><span class="grow">'+esc(p.name||"Neue Person")+'</span>'+
+      '<button class="btn ghost small" type="button" data-del="'+id+'">Entfernen</button></div>'+
+      '<div class="grid">'+
+        '<div class="field"><label for="pn-'+id+'">Name</label><input id="pn-'+id+'" data-pf="name" value="'+esc(p.name)+'"></div>'+
+        '<div class="field"><label for="pr-'+id+'">Rolle</label><input id="pr-'+id+'" data-pf="rolle" value="'+esc(p.rolle)+'"></div>'+
+        '<div class="field"><label for="pa-'+id+'">Alter (nur bei Minderjährigen)</label><div class="unit"><input id="pa-'+id+'" type="number" min="0" max="17" data-pf="alter" value="'+esc(p.alter)+'"><span>J.</span></div></div>'+
+        '<div class="field"><label for="pk-'+id+'">Ankunft (leer = automatisch)</label><input id="pk-'+id+'" type="time" data-pf="ankunft" value="'+esc(p.ankunft)+'"></div>'+
+        '<div class="field"><label for="pm-'+id+'">Visagistin</label><div class="unit"><input id="pm-'+id+'" type="number" min="0" step="5" data-pf="maske" value="'+esc(p.maske)+'"><span>min</span></div></div>'+
+        '<div class="field"><label for="ps-'+id+'">Styling</label><div class="unit"><input id="ps-'+id+'" type="number" min="0" step="5" data-pf="styling" value="'+esc(p.styling)+'"><span>min</span></div></div>'+
+      '</div></div>';
+  }).join("");
+  box.querySelectorAll("[data-pf]").forEach(function(el){
+    el.oninput=function(){
+      var p=S.personen.find(function(x){return x.id===el.closest("[data-pid]").dataset.pid;});
+      var f=el.dataset.pf; p[f] = (f==="maske"||f==="styling") ? Number(el.value||0) : el.value;
+      if(f==="name"){ el.closest(".card").querySelector(".grow").textContent=el.value||"Neue Person"; renderShots(); }
+      update();
+    };
+  });
+  box.querySelectorAll("[data-del]").forEach(function(b){ b.onclick=function(){ removePerson(b.dataset.del); }; });
+}
+function addPerson(){ S.personen.push({id:uid(),name:"",rolle:"",alter:"",maske:S.team.maskeStd,styling:S.team.stylingStd,ankunft:""}); renderPeople(); renderShots(); update(); }
+function removePerson(id){ S.personen=S.personen.filter(function(p){return p.id!==id;}); S.shots.forEach(function(s){ s.personen=s.personen.filter(function(x){return x!==id;}); }); renderPeople(); renderShots(); update(); }
+
+function renderShots(){
+  var box=$("shots");
+  box.innerHTML=S.shots.map(function(sh,i){
+    var id=sh.id;
+    var chips=S.personen.map(function(p,pi){ var on=sh.personen.indexOf(p.id)>=0; return '<button type="button" class="chip" data-chip="'+p.id+'" aria-pressed="'+on+'">'+esc(p.name||("P"+(pi+1)))+'</button>'; }).join("");
+    return '<div class="card" data-sid="'+id+'">'+
+      '<div class="card-head"><span class="badge">E'+(i+1)+'</span><span class="grow">'+esc(sh.name||"Neue Einstellung")+'</span>'+
+      '<button class="btn small" type="button" data-mv="-1" aria-label="Nach oben"'+(i===0?" disabled":"")+'>↑</button>'+
+      '<button class="btn small" type="button" data-mv="1" aria-label="Nach unten"'+(i===S.shots.length-1?" disabled":"")+'>↓</button>'+
+      '<button class="btn ghost small" type="button" data-sdel>Entfernen</button></div>'+
+      '<div class="grid">'+
+        '<div class="field full"><label for="sn-'+id+'">Beschreibung</label><input id="sn-'+id+'" data-sf="name" value="'+esc(sh.name)+'"></div>'+
+        '<div class="field"><label for="sd-'+id+'">Drehdauer</label><div class="unit"><input id="sd-'+id+'" type="number" min="5" step="5" data-sf="dauer" value="'+esc(sh.dauer)+'"><span>min</span></div></div>'+
+        '<div class="field"><label for="su-'+id+'">Umbau davor</label><select id="su-'+id+'" data-sf="umbau"'+(i===0?" disabled":"")+'>'+
+          [["keiner","Kein Umbau"],["licht","Lichtumbau"],["set","Setwechsel"],["motiv","Motivwechsel"]].map(function(o){return '<option value="'+o[0]+'"'+(sh.umbau===o[0]?" selected":"")+'>'+o[1]+'</option>';}).join("")+
+        '</select></div>'+
+        '<div class="field full"><label>Protagonisten in dieser Einstellung</label><div class="chips">'+(chips||'<span class="hint" style="margin:0">Keine Protagonisten angelegt</span>')+'</div></div>'+
+      '</div></div>';
+  }).join("");
+  box.querySelectorAll("[data-sf]").forEach(function(el){
+    el.oninput=el.onchange=function(){
+      var sh=S.shots.find(function(x){return x.id===el.closest("[data-sid]").dataset.sid;});
+      sh[el.dataset.sf] = el.dataset.sf==="dauer" ? Number(el.value||0) : el.value;
+      if(el.dataset.sf==="name") el.closest(".card").querySelector(".grow").textContent=el.value||"Neue Einstellung";
+      update();
+    };
+  });
+  box.querySelectorAll("[data-chip]").forEach(function(b){
+    b.onclick=function(){
+      var sh=S.shots.find(function(x){return x.id===b.closest("[data-sid]").dataset.sid;});
+      var pid=b.dataset.chip, k=sh.personen.indexOf(pid);
+      if(k>=0) sh.personen.splice(k,1); else sh.personen.push(pid);
+      b.setAttribute("aria-pressed", String(k<0)); update();
+    };
+  });
+  box.querySelectorAll("[data-mv]").forEach(function(b){
+    b.onclick=function(){ var i=S.shots.findIndex(function(x){return x.id===b.closest("[data-sid]").dataset.sid;}), j=i+Number(b.dataset.mv); var t=S.shots[i]; S.shots[i]=S.shots[j]; S.shots[j]=t; renderShots(); update(); };
+  });
+  box.querySelectorAll("[data-sdel]").forEach(function(b){
+    b.onclick=function(){ S.shots=S.shots.filter(function(x){return x.id!==b.closest("[data-sid]").dataset.sid;}); renderShots(); update(); };
+  });
+}
+
+/* ---------- Ausgabe ---------- */
+var LAST;
+function update(){
+  save();
+  var R=computePlan(S); LAST=R; var d=R.day;
+  $("o-title").textContent = S.meta.produktion||"Drehplan";
+  var dt = S.meta.datum ? new Date(S.meta.datum+"T12:00:00").toLocaleDateString("de-DE",{weekday:"long",day:"2-digit",month:"long",year:"numeric"}) : "Datum offen";
+  $("o-meta").textContent = [S.meta.kunde, dt, "Drehtag "+(S.meta.tag||1)+" von "+(S.meta.tage||1)].filter(Boolean).join(" · ");
+  renderLoc();
+  var st=$("o-status"); st.className="status "+R.worst;
+  var nb=R.checks.filter(function(c){return c.lvl==="bad";}).length, nw=R.checks.filter(function(c){return c.lvl==="warn";}).length;
+  st.textContent = R.worst==="bad" ? nb+(nb===1?" Problem":" Probleme") : R.worst==="warn" ? nw+(nw===1?" Hinweis":" Hinweise") : "Plan ok";
+  var firstCall = R.active.length ? Math.min.apply(null,R.active.map(function(x){return x.call;})) : null;
+  $("o-tiles").innerHTML =
+    tile("Crew-Call", fmt(d.t0), "Aufbau "+num(S.zeiten.aufbau,0)+" min")+
+    tile("Erster Cast-Call", firstCall!=null?fmt(firstCall):"–", firstCall!=null?(firstCall<d.t0?(d.t0-firstCall)+" min vor Crew":"nach Crew-Call"):"keine Protagonisten")+
+    tile("Drehschluss", fmt(d.wrap), "letzte Klappe "+fmt(d.drehEnde))+
+    tile("Arbeitszeit", dur(d.work).replace(" h",""), "Std. ohne "+d.pauses+" min Pause");
+  $("o-checks").innerHTML = R.checks.map(function(c){return '<li class="'+c.lvl+'"><span>'+c.t+'</span></li>';}).join("");
+  renderCalls(R); renderAblauf(R);
+}
+function mapsUrl(q){ return "https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(q); }
+function renderLoc(){
+  var m=S.meta, addr=(m.motiv||"").trim(), name=(m.motivName||"").trim();
+  var pin='<svg width="26" height="32" viewBox="0 0 26 32" aria-hidden="true"><path d="M13 31s11-11.2 11-18.5A11 11 0 0 0 2 12.5C2 19.8 13 31 13 31z" fill="var(--accent)"/><circle cx="13" cy="12.5" r="4.2" fill="var(--surface)"/></svg>';
+  var map = m.karte
+    ? '<div class="loc-map"><img src="'+m.karte+'" alt="Kartenausschnitt '+esc(name||addr)+'"></div>'
+    : '<button type="button" class="loc-map empty" id="loc-upload"><span class="loc-pin">'+pin+'<span>Kartenausschnitt hinzufügen</span></span></button>';
+  var q=[name,addr].filter(Boolean).join(", ");
+  var links = addr
+    ? '<div class="loc-links"><a class="btn small" href="'+mapsUrl(q)+'" target="_blank" rel="noopener">In Google Maps öffnen</a>'+
+      '<a class="btn small" href="https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(q)+'" target="_blank" rel="noopener">Route planen</a>'+
+      '<a class="btn small" href="https://www.openstreetmap.org/search?query='+encodeURIComponent(addr)+'" target="_blank" rel="noopener">OpenStreetMap</a></div>'
+    : '<div class="who">Adresse in Schritt 01 eintragen, dann erscheinen hier die Kartenlinks.</div>';
+  $("o-loc").innerHTML = map+'<div class="loc-info"><div class="k">Motiv</div><h3>'+esc(name||"Motiv offen")+'</h3><div class="addr">'+esc(addr||"–")+'</div>'+links+'</div>';
+  var up=$("loc-upload"); if(up) up.onclick=function(){ $("m-karte").click(); };
+}
+function loadMapImage(file){
+  if(!file) return;
+  if(!/^image\//.test(file.type)){ toast("Bitte eine Bilddatei wählen (PNG oder JPG)."); return; }
+  var r=new FileReader();
+  r.onload=function(){
+    var img=new Image();
+    img.onload=function(){
+      var w=Math.min(640,img.width), h=Math.round(img.height*w/img.width);
+      var c=document.createElement("canvas"); c.width=w; c.height=h;
+      c.getContext("2d").drawImage(img,0,0,w,h);
+      S.meta.karte=c.toDataURL("image/jpeg",0.82); update(); toast("Kartenausschnitt übernommen");
+    };
+    img.onerror=function(){ toast("Das Bild ließ sich nicht lesen. Bitte ein anderes versuchen."); };
+    img.src=r.result;
+  };
+  r.readAsDataURL(file);
+}
+function tile(k,v,s){ return '<div class="tile"><div class="k">'+k+'</div><div class="v">'+v+'</div><div class="s">'+s+'</div></div>'; }
+
+function renderCalls(R){
+  if(!R.people.length){ $("o-calls").innerHTML='<tr><td class="who">Keine Protagonisten angelegt.</td></tr>'; return; }
+  var rows=R.people.slice().sort(function(a,b){ return (a.first==null)-(b.first==null) || (a.call||0)-(b.call||0); }).map(function(x){
+    var p=x.p, name=esc(p.name||"Ohne Namen")+(p.alter!==""&&p.alter!=null?' <span class="who">('+esc(p.alter)+' J.)</span>':'');
+    if(x.first==null) return '<tr><td>'+name+'<div class="who">'+esc(p.rolle)+'</div></td><td colspan="5" class="who">In keiner Einstellung</td></tr>';
+    return '<tr><td>'+name+'<div class="who">'+esc(p.rolle)+'</div></td>'+
+      '<td class="time mono"><b'+(x.late?' class="flag"':'')+'>'+fmt(x.call)+'</b>'+(x.late?'<div class="who">nötig '+fmt(x.callCalc)+'</div>':'')+'</td>'+
+      '<td class="time mono">'+(x.maske.end>x.maske.start?fmt(x.maske.start)+'–'+fmt(x.maske.end):'–')+'</td>'+
+      '<td class="time mono">'+(x.styling.end>x.styling.start?fmt(x.styling.start)+'–'+fmt(x.styling.end):'–')+'</td>'+
+      '<td class="time mono">'+fmt(x.first)+'</td>'+
+      '<td class="time mono">'+fmt(x.release)+'</td></tr>';
+  }).join("");
+  $("o-calls").innerHTML='<thead><tr><th>Name</th><th>Ankunft</th><th>Maske</th><th>Styling</th><th>1. Einstellung</th><th>Frei</th></tr></thead><tbody>'+rows+'</tbody>';
+}
+
+function renderAblauf(R){
+  var names={}; S.personen.forEach(function(p,i){ names[p.id]=p.name||("P"+(i+1)); });
+  var tl={aufbau:"Aufbau",umbau:"Umbau",shot:"Dreh",pause:"Pause",abbau:"Abbau"};
+  var rows=R.day.blocks.map(function(b){
+    var who = b.typ==="shot" ? (b.personen.length? b.personen.map(function(id){return esc(names[id]);}).join(", ") : "ohne Darsteller") : (b.typ==="pause"?"alle":"Crew");
+    return '<tr class="'+b.typ+'"><td class="time mono">'+fmt(b.start)+'–'+fmt(b.end)+'</td><td class="mono">'+(b.end-b.start)+'′</td>'+
+      '<td><span class="tag '+b.typ+'">'+(b.typ==="shot"?"E"+b.nr:tl[b.typ])+'</span>'+esc(b.name)+'</td><td class="who">'+who+'</td></tr>';
+  }).join("");
+  $("o-ablauf").innerHTML='<thead><tr><th>Zeit</th><th>Dauer</th><th>Programmpunkt</th><th>Beteiligt</th></tr></thead><tbody>'+rows+
+    '<tr><td class="time mono"><b>'+fmt(R.day.wrap)+'</b></td><td></td><td><b>Drehschluss</b></td><td></td></tr></tbody>';
+}
+
+function planText(){
+  var R=LAST, d=R.day, L=[];
+  L.push("DREHPLAN – "+(S.meta.produktion||"Ohne Titel"));
+  L.push([S.meta.kunde, S.meta.datum, "Drehtag "+S.meta.tag+"/"+S.meta.tage].filter(Boolean).join(" | "));
+  var mq=[S.meta.motivName,S.meta.motiv].filter(Boolean).join(", ");
+  if(mq){ L.push("Motiv: "+mq); if(S.meta.motiv) L.push("Karte: "+mapsUrl(mq)); }
+  L.push(""); L.push("Crew-Call "+fmt(d.t0)+" | Drehschluss "+fmt(d.wrap)+" | Arbeitszeit "+dur(d.work)+" | Pausen "+d.pauses+" min");
+  L.push(""); L.push("CALLZEITEN PROTAGONISTEN");
+  R.active.slice().sort(function(a,b){return a.call-b.call;}).forEach(function(x){
+    L.push(fmt(x.call)+"  "+(x.p.name||"Ohne Namen")+(x.p.rolle?" ("+x.p.rolle+")":"")+" | Maske "+fmt(x.maske.start)+" | Styling "+fmt(x.styling.start)+" | Set "+fmt(x.first)+" | frei "+fmt(x.release));
+  });
+  L.push(""); L.push("TAGESABLAUF");
+  var names={}; S.personen.forEach(function(p,i){ names[p.id]=p.name||("P"+(i+1)); });
+  d.blocks.forEach(function(b){ L.push(fmt(b.start)+"–"+fmt(b.end)+"  "+(b.typ==="shot"?"E"+b.nr+" ":"")+b.name+(b.typ==="shot"&&b.personen.length?" ["+b.personen.map(function(id){return names[id];}).join(", ")+"]":"")); });
+  L.push(fmt(d.wrap)+"  Drehschluss");
+  var issues=R.checks.filter(function(c){return c.lvl==="bad"||c.lvl==="warn";});
+  if(issues.length){ L.push(""); L.push("HINWEISE"); issues.forEach(function(c){ L.push("- "+c.t.replace(/<[^>]+>/g,"")); }); }
+  return L.join("\n");
+}
+
+/* ---------- Aktionen ---------- */
+function toast(t){ var e=$("toast"); e.textContent=t; e.classList.add("show"); clearTimeout(toast.h); toast.h=setTimeout(function(){e.classList.remove("show");},2200); }
+function copy(text, ok){
+  try{ navigator.clipboard.writeText(text).then(function(){toast(ok);}, function(){ openModal(text); toast("Kopieren nicht möglich, Text bitte manuell markieren"); }); }
+  catch(e){ openModal(text); }
+}
+function openModal(text){ $("modal-text").value=text; $("modal").classList.add("open"); $("modal-text").focus(); }
+function full(){ bindStatic(); renderPeople(); renderShots(); update(); }
+
+$("btn-copy").onclick=function(){ copy(planText(),"Drehplan kopiert"); };
+$("btn-io").onclick=function(){ openModal(JSON.stringify(S,null,1)); };
+$("modal-close").onclick=function(){ $("modal").classList.remove("open"); };
+$("modal").onclick=function(e){ if(e.target.id==="modal") $("modal").classList.remove("open"); };
+document.addEventListener("keydown",function(e){ if(e.key==="Escape") $("modal").classList.remove("open"); });
+$("modal-copy").onclick=function(){ copy($("modal-text").value,"Plan-Daten kopiert"); };
+$("modal-load").onclick=function(){
+  try{ var o=JSON.parse($("modal-text").value); if(!o.zeiten||!o.shots||!o.personen) throw 0; S=o; full(); $("modal").classList.remove("open"); toast("Plan geladen"); }
+  catch(e){ toast("Der Text ist kein gültiger Plan. Bitte den kompletten gespeicherten Text einfügen."); }
+};
+$("btn-example").onclick=function(){ S=example(); full(); toast("Beispiel geladen"); };
+$("btn-new").onclick=function(){ S=blank(); full(); toast("Neuer leerer Plan"); };
+/* ---------- Motiv-Adressbuch & Adresssuche ---------- */
+var BOOK_KEY="drehplan-motive-v2";
+function book(){ try{ return JSON.parse(localStorage.getItem(BOOK_KEY)||"[]"); }catch(e){ return []; } }
+function saveBook(b){ try{ localStorage.setItem(BOOK_KEY, JSON.stringify(b)); }catch(e){} }
+function norm(t){ return String(t||"").trim().toLowerCase(); }
+function findInBook(name){ var n=norm(name); return n ? book().find(function(e){return norm(e.name)===n;}) : null; }
+function rememberMotiv(){
+  var n=(S.meta.motivName||"").trim(), a=(S.meta.motiv||"").trim(); if(!n||!a) return;
+  var b=book().filter(function(e){return norm(e.name)!==norm(n);}); b.unshift({name:n, adresse:a}); saveBook(b.slice(0,100)); renderBookList();
+}
+function renderBookList(){ $("motiv-list").innerHTML=book().map(function(e){return '<option value="'+esc(e.name)+'">'+esc(e.adresse)+'</option>';}).join(""); }
+function setAddress(a){ S.meta.motiv=a; $("m-motiv").value=a; rememberMotiv(); update(); }
+function suggestBox(html){ var s=$("motiv-suggest"); s.innerHTML=html; s.hidden=!html; }
+var SAMPLE=null, findCtl=null;
+if(window.claude && claude.use){ claude.use("sample").then(function(x){ SAMPLE=x; }).catch(function(){ SAMPLE=null; }); }
+
+async function findAddress(){
+  var name=(S.meta.motivName||"").trim();
+  if(!name){ toast("Bitte zuerst den Namen des Studios oder Motivs eintragen."); $("m-motivname").focus(); return; }
+  var hit=findInBook(name);
+  if(hit){ setAddress(hit.adresse); suggestBox(""); toast("Adresse aus deinem Adressbuch übernommen"); return; }
+  var mapsLink='<a href="'+mapsUrl(name)+'" target="_blank" rel="noopener">„'+esc(name)+'“ in Google Maps suchen</a>';
+  if(!SAMPLE){
+    suggestBox('<div>Noch nicht im Adressbuch. '+mapsLink+', Adresse unten eintragen. Beim nächsten Mal findet die App sie automatisch.</div>');
+    return;
+  }
+  if(findCtl) findCtl.abort(); findCtl=new AbortController();
+  suggestBox('<div class="src">Claude sucht eine Adresse …</div>');
+  $("m-find").disabled=true;
+  try{
+    var prompt="Du hilfst bei der Drehplanung in Deutschland. Nenne die Postanschrift dieses Drehorts bzw. Filmstudios: \""+name+"\".\n"+
+      "Antworte NUR mit JSON in dieser Form: {\"gefunden\":true|false,\"name\":\"offizieller Name\",\"adresse\":\"Straße Hausnummer, PLZ Ort\",\"sicherheit\":\"hoch\"|\"mittel\"|\"niedrig\"}.\n"+
+      "Erfinde keine Adresse. Wenn du den Ort nicht eindeutig kennst oder die Hausnummer nicht weißt, setze gefunden auf false.";
+    var r=await SAMPLE.json(prompt,{modelTier:"quick", signal:findCtl.signal});
+    if(r && r.gefunden && r.adresse){
+      suggestBox('<div class="src claude">Vorschlag von Claude ohne Live-Suche, bitte prüfen (Sicherheit: '+esc(r.sicherheit||"unbekannt")+')</div>'+
+        '<div><b>'+esc(r.name||name)+'</b><br>'+esc(r.adresse)+'</div>'+
+        '<div class="row"><button class="btn primary small" type="button" id="sg-take">Adresse übernehmen</button>'+
+        '<a href="'+mapsUrl((r.name||name)+", "+r.adresse)+'" target="_blank" rel="noopener">In Google Maps prüfen</a>'+
+        '<button class="btn ghost small" type="button" id="sg-close">Verwerfen</button></div>');
+      $("sg-take").onclick=function(){ setAddress(r.adresse); suggestBox(""); toast("Adresse übernommen"); };
+      $("sg-close").onclick=function(){ suggestBox(""); };
+    } else {
+      suggestBox('<div>Claude kennt diese Adresse nicht sicher. '+mapsLink+' und die Adresse unten eintragen. Die App merkt sie sich für das nächste Mal.</div>');
+    }
+  }catch(e){
+    if(e && e.name==="AbortError") return;
+    var msg = e&&e.code==="not_granted" ? "Die Adresssuche über Claude ist nicht freigegeben." : e&&e.code==="rate_limited" ? "Gerade zu viele Anfragen, bitte gleich noch einmal versuchen." : "Die Suche hat nicht geklappt.";
+    suggestBox('<div>'+msg+' '+mapsLink+'.</div>');
+  }finally{ $("m-find").disabled=false; }
+}
+$("m-find").onclick=findAddress;
+$("m-motivname").addEventListener("keydown",function(e){ if(e.key==="Enter"){ e.preventDefault(); findAddress(); } });
+$("m-motivname").addEventListener("input",function(){
+  S.meta.motivName=$("m-motivname").value;
+  var hit=findInBook(S.meta.motivName);
+  if(hit && hit.adresse!==(S.meta.motiv||"").trim()){ setAddress(hit.adresse); }
+  suggestBox("");
+});
+$("m-motiv").addEventListener("change", rememberMotiv);
+$("m-motivname").addEventListener("change", rememberMotiv);
+
+$("m-karte").onchange=function(e){ loadMapImage(e.target.files[0]); e.target.value=""; };
+$("m-karte-del").onclick=function(){ S.meta.karte=""; update(); };
+$("p-plus").onclick=addPerson;
+$("p-minus").onclick=function(){ if(S.personen.length) removePerson(S.personen[S.personen.length-1].id); };
+$("shot-add").onclick=function(){ S.shots.push({id:uid(),name:"",dauer:30,umbau:"licht",personen:[]}); renderShots(); update(); };
+
+renderBookList();
+full();
+</script>
+</body>
+</html>
