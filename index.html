@@ -170,10 +170,64 @@ tr.pause td{background:var(--ok-soft)}
 .modal .box{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:18px; width:min(640px,100%); display:flex; flex-direction:column; gap:12px}
 .modal textarea{width:100%; min-height:260px; border:1px solid var(--line); border-radius:8px; padding:10px; background:var(--surface-2); font-family:var(--f-mono); font-size:12.5px}
 .modal .row{display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap}
-.toast{position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--bg); padding:8px 14px; border-radius:8px; font-size:13.5px; opacity:0; transition:opacity .2s; pointer-events:none; z-index:30}
+.toast{position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--bg); padding:8px 14px; border-radius:8px; font-size:13.5px; opacity:0; transition:opacity .2s; pointer-events:none; z-index:50}
 .toast.show{opacity:1}
 @media (prefers-reduced-motion: reduce){ .toast{transition:none} }
 .foot{color:var(--muted); font-size:12px}
+
+/* PDF-Vorschau (Layout angelehnt an die bisherigen Shotlists: Arial, schwarze Film-Balken, graue Ort-/Umbau-Balken) */
+.pv{position:fixed; inset:0; z-index:40; background:rgba(10,12,18,.72); display:none; flex-direction:column}
+.pv.open{display:flex}
+.pv-bar{display:flex; flex-wrap:wrap; align-items:center; gap:10px 16px; padding:10px 16px; background:var(--surface); border-bottom:1px solid var(--line)}
+.pv-bar h3{font-size:16px; margin-right:auto}
+.pv-bar label{display:inline-flex; align-items:center; gap:6px; font-size:13.5px}
+.pv-bar input[type="number"]{width:56px; border:1px solid var(--line); border-radius:6px; padding:4px 6px; background:var(--surface-2); font-family:var(--f-mono)}
+.pv-scroll{flex:1; overflow:auto; padding:24px 16px}
+.pv-scale{transform-origin:top left; margin:0 auto}
+.pv-hint{font-size:12.5px; color:var(--muted); width:100%}
+
+.sheet{--sh-black:#000; --sh-dark:#5c5c5c; --sh-mid:#8e8e8e; --sh-line:#bdbdbd; --sh-acc:#e5553b;
+  width:1123px; min-height:794px; background:#fff; color:#111; padding:40px 48px 36px; box-shadow:0 10px 40px rgba(0,0,0,.35);
+  font-family:Arial, "Helvetica Neue", Helvetica, sans-serif; font-size:11.5px; line-height:1.35; color-scheme:light}
+.sheet *{-webkit-print-color-adjust:exact; print-color-adjust:exact}
+.sh-top{display:flex; justify-content:space-between; align-items:flex-start; gap:20px; min-height:38px}
+.sh-logo img{max-height:44px; max-width:220px; display:block}
+.sh-stand{font-size:10px; color:#555; text-align:right; padding-top:6px}
+.sh-title{font-size:17px; font-weight:700; color:#555; margin:18px 0 8px 18px; font-family:inherit}
+.sh-title .acc{color:var(--sh-acc)}
+.sh-title .thin{font-weight:400}
+.sh-calls{margin:0 0 10px 18px; color:#444; font-size:12.5px; display:flex; flex-wrap:wrap; gap:4px 22px}
+.sh-calls b{color:#111}
+.sh-t{width:calc(100% - 2px); border-collapse:collapse; table-layout:fixed; margin-bottom:16px}
+.sh-t th{background:#fff; color:#111; font-size:12px; font-weight:700; text-align:left; padding:6px 7px; border:1px solid var(--sh-line); white-space:nowrap}
+.sh-t td{border:1px solid var(--sh-line); padding:5px 7px; vertical-align:top; overflow-wrap:anywhere; font-size:11.5px}
+.sh-t td.num{text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap}
+.sh-t td.tm{font-variant-numeric:tabular-nums; white-space:nowrap}
+.sh-t tr{break-inside:avoid}
+.sh-t thead{display:table-header-group}
+.sh-bar td{color:#fff; font-weight:700; font-size:12.5px; padding:6px 7px; border-color:#fff}
+.sh-bar td.c{text-align:center}
+.sh-bar small{display:block; font-weight:400; font-size:10px}
+.sh-bar.black td{background:var(--sh-black); border-color:var(--sh-black)}
+.sh-bar.dark td{background:var(--sh-dark); border-color:var(--sh-dark)}
+.sh-bar.mid td{background:var(--sh-mid); border-color:var(--sh-mid)}
+.sh-bar td.l{text-align:left; white-space:nowrap}
+.sh-who{color:#555}
+.sh-notes{border:1px solid var(--sh-line); padding:8px 10px; break-inside:avoid}
+.sh-notes h4{margin:0 0 4px; font-size:12px}
+.sh-notes ul{margin:0; padding-left:16px}
+.sh-foot{display:flex; justify-content:space-between; color:#777; font-size:9.5px; margin-top:8px}
+
+@page{ size:A4 landscape; margin:10mm 11mm 12mm; @bottom-right{content:counter(page) " / " counter(pages); font:8pt Arial, sans-serif; color:#777} }
+@media print{
+  html,body{background:#fff !important}
+  body > *:not(#pv){display:none !important}
+  #pv{display:block !important; position:static; background:none}
+  .pv-bar,.pv-hint{display:none !important}
+  .pv-scroll{overflow:visible; padding:0}
+  .pv-scale{transform:none !important; height:auto !important; width:auto !important; margin:0 !important}
+  .sheet{width:auto; min-height:0; box-shadow:none; padding:0}
+}
 
 /* Adresssuche */
 .search-row{display:flex; gap:8px}
@@ -219,7 +273,8 @@ tr.pause td{background:var(--ok-soft)}
     <button class="btn" id="btn-example" type="button">Beispiel laden</button>
     <button class="btn" id="btn-new" type="button">Neuer Plan</button>
     <button class="btn" id="btn-io" type="button">Speichern / Laden</button>
-    <button class="btn primary" id="btn-copy" type="button">Drehplan als Text kopieren</button>
+    <button class="btn" id="btn-copy" type="button">Als Text kopieren</button>
+    <button class="btn primary" id="btn-pdf" type="button">PDF-Vorschau</button>
   </div>
 </header>
 
@@ -249,6 +304,13 @@ tr.pause td{background:var(--ok-soft)}
           <div class="upload-row">
             <input id="m-karte" type="file" accept="image/*">
             <button class="btn ghost small" type="button" id="m-karte-del">Bild entfernen</button>
+          </div>
+        </div>
+        <div class="field full">
+          <label for="m-logo">Logo für das PDF (optional, am besten PNG mit transparentem Hintergrund)</label>
+          <div class="upload-row">
+            <input id="m-logo" type="file" accept="image/*">
+            <button class="btn ghost small" type="button" id="m-logo-del">Logo entfernen</button>
           </div>
         </div>
       </div>
@@ -366,6 +428,19 @@ tr.pause td{background:var(--ok-soft)}
   </div>
 </div>
 <div class="toast" id="toast" role="status"></div>
+<div class="pv" id="pv" role="dialog" aria-modal="true" aria-labelledby="pv-title">
+  <div class="pv-bar">
+    <h3 id="pv-title">PDF-Vorschau</h3>
+    <label for="pv-stand">Stand <input id="pv-stand" type="number" min="1"></label>
+    <label><input id="pv-calls" type="checkbox"> Callzeiten Cast</label>
+    <label><input id="pv-notes" type="checkbox"> Hinweise aus der Prüfung</label>
+    <button class="btn" type="button" id="pv-close">Schließen</button>
+    <button class="btn primary" type="button" id="pv-print">Als PDF speichern</button>
+    <div class="pv-hint">„Als PDF speichern“ öffnet den Druckdialog. Dort als Ziel „Als PDF sichern“ bzw. „Microsoft Print to PDF“ wählen. Querformat A4 ist voreingestellt.</div>
+  </div>
+  <div class="pv-scroll" id="pv-scroll"><div class="pv-scale" id="pv-scale"><div class="sheet" id="pv-sheet"></div></div></div>
+</div>
+
 
 <script id="logic">
 /* ---------- Reine Planungslogik ---------- */
@@ -510,13 +585,13 @@ function example(){
       {id:c, name:"Sophie Lang", rolle:"Hand-Model", alter:"", maske:20, styling:10, ankunft:""}
     ],
     shots:[
-      {id:uid(), name:"Totale Wohnzimmer: Paar am Kamin, Weihnachtsdeko", dauer:60, umbau:"keiner", personen:[a,b]},
-      {id:uid(), name:"Halbnah: Anna öffnet die goldene Schachtel", dauer:45, umbau:"licht", personen:[a]},
-      {id:uid(), name:"Gegenschuss: Paar teilt eine Praline, lacht", dauer:45, umbau:"licht", personen:[a,b]},
-      {id:uid(), name:"Close-up: Markus' Reaktion", dauer:30, umbau:"licht", personen:[b]},
-      {id:uid(), name:"Hand-Insert: Praline aus der Schachtel nehmen", dauer:45, umbau:"set", personen:[c]},
-      {id:uid(), name:"Tabletop Slow-Motion: Praline bricht auf (Food-Styling)", dauer:45, umbau:"licht", personen:[]},
-      {id:uid(), name:"Packshot Endframe: Schachtel mit Logo", dauer:30, umbau:"set", personen:[]}
+      {id:uid(), name:"Totale Wohnzimmer: Paar am Kamin, Weihnachtsdeko", dauer:60, umbau:"keiner", personen:[a,b], notiz:"Kaminfeuer (LED), Weihnachtsbaum, 2 Schachteln Rocher 16er"},
+      {id:uid(), name:"Halbnah: Anna öffnet die goldene Schachtel", dauer:45, umbau:"licht", personen:[a], notiz:"Hero-Schachtel, Goldpapier knitterfrei"},
+      {id:uid(), name:"Gegenschuss: Paar teilt eine Praline, lacht", dauer:45, umbau:"licht", personen:[a,b], notiz:"Ersatzpralinen bereithalten (min. 20 Stück)"},
+      {id:uid(), name:"Close-up: Markus' Reaktion", dauer:30, umbau:"licht", personen:[b], notiz:""},
+      {id:uid(), name:"Hand-Insert: Praline aus der Schachtel nehmen", dauer:45, umbau:"set", personen:[c], notiz:"Handpflege/Maniküre vorab, Tisch in Nussbaum"},
+      {id:uid(), name:"Tabletop Slow-Motion: Praline bricht auf (Food-Styling)", dauer:45, umbau:"licht", personen:[], notiz:"Highspeed-Kamera 1000 fps, Food-Stylist:in"},
+      {id:uid(), name:"Packshot Endframe: Schachtel mit Logo", dauer:30, umbau:"set", personen:[], notiz:"Packshot-Freigabe durch Kunde vor Ort"}
     ]
   };
 }
@@ -524,7 +599,7 @@ function blank(){
   return {meta:{produktion:"",kunde:"",datum:"",tag:1,tage:1,motivName:"",motiv:"",karte:""}, zeiten:{crewCall:"07:00",drehschluss:"18:00",aufbau:60,abbau:45,vortag:""},
     regel:"arbzg", customMax:10, puffer:10, pause:{mittag:45},
     team:{maskeStd:45,stylingStd:30,visagisten:1,stylisten:1,ankunftPuffer:15,setPuffer:10}, umbau:{licht:20,set:40,motiv:60},
-    personen:[], shots:[{id:uid(),name:"",dauer:60,umbau:"licht",personen:[]}]};
+    personen:[], shots:[{id:uid(),name:"",dauer:60,umbau:"licht",personen:[],notiz:""}]};
 }
 var KEY="drehplan-generator-v2", S;
 try{ var raw=localStorage.getItem(KEY); S = raw?JSON.parse(raw):example(); }catch(e){ S=example(); }
@@ -607,6 +682,7 @@ function renderShots(){
         '<div class="field"><label for="su-'+id+'">Umbau davor</label><select id="su-'+id+'" data-sf="umbau"'+(i===0?" disabled":"")+'>'+
           [["keiner","Kein Umbau"],["licht","Lichtumbau"],["set","Setwechsel"],["motiv","Motivwechsel"]].map(function(o){return '<option value="'+o[0]+'"'+(sh.umbau===o[0]?" selected":"")+'>'+o[1]+'</option>';}).join("")+
         '</select></div>'+
+        '<div class="field full"><label for="sp-'+id+'">Inhalt / Props</label><input id="sp-'+id+'" data-sf="notiz" value="'+esc(sh.notiz)+'" placeholder="z. B. Produkt, Requisiten, Technik-Hinweise"></div>'+
         '<div class="field full"><label>Protagonisten in dieser Einstellung</label><div class="chips">'+(chips||'<span class="hint" style="margin:0">Keine Protagonisten angelegt</span>')+'</div></div>'+
       '</div></div>';
   }).join("");
@@ -671,17 +747,18 @@ function renderLoc(){
   $("o-loc").innerHTML = map+'<div class="loc-info"><div class="k">Motiv</div><h3>'+esc(name||"Motiv offen")+'</h3><div class="addr">'+esc(addr||"–")+'</div>'+links+'</div>';
   var up=$("loc-upload"); if(up) up.onclick=function(){ $("m-karte").click(); };
 }
-function loadMapImage(file){
+function loadMapImage(file){ loadImage(file,"karte",640,"image/jpeg","Kartenausschnitt übernommen"); }
+function loadImage(file,key,maxW,type,msg){
   if(!file) return;
   if(!/^image\//.test(file.type)){ toast("Bitte eine Bilddatei wählen (PNG oder JPG)."); return; }
   var r=new FileReader();
   r.onload=function(){
     var img=new Image();
     img.onload=function(){
-      var w=Math.min(640,img.width), h=Math.round(img.height*w/img.width);
+      var w=Math.min(maxW,img.width), h=Math.round(img.height*w/img.width);
       var c=document.createElement("canvas"); c.width=w; c.height=h;
       c.getContext("2d").drawImage(img,0,0,w,h);
-      S.meta.karte=c.toDataURL("image/jpeg",0.82); update(); toast("Kartenausschnitt übernommen");
+      S.meta[key]=c.toDataURL(type,0.85); update(); toast(msg);
     };
     img.onerror=function(){ toast("Das Bild ließ sich nicht lesen. Bitte ein anderes versuchen."); };
     img.src=r.result;
@@ -758,6 +835,90 @@ $("modal-load").onclick=function(){
 };
 $("btn-example").onclick=function(){ S=example(); full(); toast("Beispiel geladen"); };
 $("btn-new").onclick=function(){ S=blank(); full(); toast("Neuer leerer Plan"); };
+/* ---------- PDF-Vorschau ---------- */
+function hhmm(m){ m=Math.max(0,Math.round(m)); var h=Math.floor(m/60), mi=m%60; return (h<10?"0":"")+h+":"+(mi<10?"0":"")+mi; }
+function dDE(iso,short){ if(!iso) return ""; var p=iso.split("-"); return p[2]+"."+p[1]+"."+(short?p[0].slice(2):p[0]); }
+function pdfOpts(){ S.pdf=S.pdf||{}; if(S.pdf.stand==null) S.pdf.stand=1; if(S.pdf.calls==null) S.pdf.calls=true; if(S.pdf.notes==null) S.pdf.notes=false; return S.pdf; }
+function sheetHTML(){
+  var R=computePlan(S), d=R.day, m=S.meta, o=pdfOpts();
+  var names={}; S.personen.forEach(function(p,i){ names[p.id]=p.name||("P"+(i+1)); });
+  var tagNr=("0"+(m.tag||1)).slice(-2);
+  var today=new Date(), heute=("0"+today.getDate()).slice(-2)+"."+("0"+(today.getMonth()+1)).slice(-2)+"."+String(today.getFullYear()).slice(2);
+  var firstShot=d.blocks.find(function(b){return b.typ==="shot";});
+  var h='<div class="sh-top"><div class="sh-logo">'+(m.logo?'<img src="'+m.logo+'" alt="Logo">':'')+'</div>'+
+    '<div class="sh-stand">Stand: '+esc(o.stand)+' &nbsp; Datum: '+heute+'</div></div>';
+  h+='<div class="sh-title">Shotlist: <span class="acc">Drehtag '+tagNr+'</span><span class="thin">_'+esc(m.produktion||"Produktion")+'</span>'+
+    (m.datum?' <span class="thin">| '+dDE(m.datum,true)+'</span>':'')+(m.motivName?' | Setup: '+esc(m.motivName):'')+'</div>';
+  h+='<div class="sh-calls"><span>Crew_Call <b>'+fmt(d.t0)+'</b></span>'+(firstShot?'<span>Ready <b>'+fmt(firstShot.start)+'</b></span>':'')+
+    '<span>Drehschluss <b>'+fmt(d.wrap)+'</b></span>'+(m.kunde?'<span>Kunde: <b>'+esc(m.kunde)+'</b></span>':'')+'</div>';
+  h+='<table class="sh-t"><colgroup><col style="width:7%"><col style="width:8%"><col style="width:8%"><col style="width:38%"><col style="width:39%"></colgroup>'+
+    '<thead><tr><th>Film</th><th>Uhrzeit</th><th>Dauer</th><th>Szene</th><th>Inhalt / Props</th></tr></thead><tbody>';
+  h+='<tr class="sh-bar black"><td class="l">'+fmt(d.t0).slice(0,2)+'h</td><td class="c" colspan="4">FILM 01: '+esc((m.produktion||"Produktion").toUpperCase())+'</td></tr>';
+  var ort=[m.motivName,m.motiv].filter(Boolean).join(", ");
+  if(ort) h+='<tr class="sh-bar dark"><td></td><td class="c" colspan="4">Ort: '+esc(ort)+'</td></tr>';
+  d.blocks.forEach(function(b){
+    var len=b.end-b.start;
+    if(b.typ==="umbau") h+='<tr class="sh-bar dark"><td class="l">'+len+' min</td><td class="c" colspan="4">'+esc(b.name)+' '+fmt(b.start)+' – '+fmt(b.end)+'</td></tr>';
+    else if(b.typ==="pause") h+='<tr class="sh-bar mid"><td class="l">'+len+' min</td><td class="c" colspan="4">'+(b.name.indexOf("Mittag")===0?'LUNCH':'PAUSE')+' '+fmt(b.start)+' – '+fmt(b.end)+'</td></tr>';
+    else {
+      var inhalt="";
+      if(b.typ==="shot"){
+        var who=b.personen.length? b.personen.map(function(id){return esc(names[id]);}).join(", ") : "ohne Darsteller";
+        inhalt='<span class="sh-who">'+who+'</span>'+(b.shot.notiz?'<br>'+esc(b.shot.notiz):'');
+      } else if(b.typ==="aufbau"){ inhalt=""; }
+      h+='<tr><td class="num">'+(b.typ==="shot"?b.nr:'')+'</td><td class="tm">'+fmt(b.start)+'</td><td class="tm">'+hhmm(len)+'</td><td>'+esc(b.name)+'</td><td>'+inhalt+'</td></tr>';
+    }
+  });
+  h+='<tr class="sh-bar black"><td class="l">'+fmt(d.wrap).slice(0,2)+'h</td><td class="c" colspan="4">DREHSCHLUSS '+fmt(d.wrap)+' <small>Arbeitszeit '+dur(d.work)+' · Pausen '+d.pauses+' min</small></td></tr>';
+  h+='</tbody></table>';
+  if(o.calls && R.people.length){
+    h+='<table class="sh-t"><colgroup><col style="width:20%"><col style="width:16%"><col style="width:11%"><col style="width:14%"><col style="width:14%"><col style="width:12%"><col style="width:13%"></colgroup>'+
+      '<thead><tr><th>Cast</th><th>Rolle</th><th>Ankunft</th><th>Maske</th><th>Styling</th><th>Am Set</th><th>Frei</th></tr></thead><tbody>'+
+      '<tr class="sh-bar black"><td class="c" colspan="7">CAST &amp; CALLZEITEN</td></tr>';
+    R.people.slice().sort(function(a,b){ return (a.first==null)-(b.first==null) || (a.call||0)-(b.call||0); }).forEach(function(x){
+      var p=x.p;
+      if(x.first==null){ h+='<tr><td>'+esc(p.name||"Ohne Namen")+'</td><td>'+esc(p.rolle)+'</td><td colspan="5" class="sh-who">nicht eingeplant</td></tr>'; return; }
+      h+='<tr><td><b>'+esc(p.name||"Ohne Namen")+'</b>'+(p.alter!==""&&p.alter!=null?' ('+esc(p.alter)+' J.)':'')+'</td><td>'+esc(p.rolle)+'</td><td class="tm"><b>'+fmt(x.call)+'</b></td>'+
+        '<td class="tm">'+(x.maske.end>x.maske.start?fmt(x.maske.start)+' – '+fmt(x.maske.end):'–')+'</td>'+
+        '<td class="tm">'+(x.styling.end>x.styling.start?fmt(x.styling.start)+' – '+fmt(x.styling.end):'–')+'</td>'+
+        '<td class="tm">'+fmt(x.first)+'</td><td class="tm">'+fmt(x.release)+'</td></tr>';
+    });
+    h+='</tbody></table>';
+  }
+  if(o.notes){
+    var issues=R.checks.filter(function(c){return c.lvl==="bad"||c.lvl==="warn";});
+    if(issues.length) h+='<div class="sh-notes"><h4>Hinweise</h4><ul>'+issues.map(function(c){return '<li>'+c.t.replace(/<\/?b>/g,"")+'</li>';}).join("")+'</ul></div>';
+  }
+  h+='<div class="sh-foot"><span>'+esc([m.produktion,m.kunde].filter(Boolean).join(" · "))+'</span><span>Drehtag '+(m.tag||1)+' von '+(m.tage||1)+'</span></div>';
+  return h;
+}
+function fitSheet(){
+  var sc=$("pv-scroll"), wrap=$("pv-scale"), sh=$("pv-sheet");
+  var avail=sc.clientWidth-32, s=Math.min(1, avail/1123);
+  wrap.style.transform="scale("+s+")"; wrap.style.width="1123px";
+  wrap.style.height=(sh.offsetHeight*s)+"px";
+  wrap.style.marginLeft=Math.max(0,(sc.clientWidth-32-1123*s)/2)+"px";
+}
+function renderPreview(){ $("pv-sheet").innerHTML=sheetHTML(); fitSheet(); }
+function openPreview(){
+  var o=pdfOpts(); $("pv-stand").value=o.stand; $("pv-calls").checked=o.calls; $("pv-notes").checked=o.notes;
+  $("pv").classList.add("open"); renderPreview(); $("pv-print").focus();
+}
+$("btn-pdf").onclick=openPreview;
+$("pv-close").onclick=function(){ $("pv").classList.remove("open"); };
+$("pv-stand").oninput=function(){ pdfOpts().stand=this.value||1; save(); renderPreview(); };
+$("pv-calls").onchange=function(){ pdfOpts().calls=this.checked; save(); renderPreview(); };
+$("pv-notes").onchange=function(){ pdfOpts().notes=this.checked; save(); renderPreview(); };
+window.addEventListener("resize",function(){ if($("pv").classList.contains("open")) fitSheet(); });
+document.addEventListener("keydown",function(e){ if(e.key==="Escape") $("pv").classList.remove("open"); });
+$("pv-print").onclick=function(){
+  var old=document.title, m=S.meta;
+  document.title=("Drehplan_DT"+("0"+(m.tag||1)).slice(-2)+"_"+(m.produktion||"Plan")+(m.datum?"_"+m.datum:"")).replace(/[^\wäöüÄÖÜß\-]+/g,"_").replace(/_+/g,"_");
+  var restore=function(){ document.title=old; window.removeEventListener("afterprint",restore); };
+  window.addEventListener("afterprint",restore);
+  try{ window.print(); }catch(e){ restore(); toast("Drucken ist hier blockiert. Bitte die App direkt im Browser öffnen."); }
+};
+
 /* ---------- Motiv-Adressbuch & Adresssuche ---------- */
 var BOOK_KEY="drehplan-motive-v2";
 function book(){ try{ return JSON.parse(localStorage.getItem(BOOK_KEY)||"[]"); }catch(e){ return []; } }
@@ -822,9 +983,11 @@ $("m-motivname").addEventListener("change", rememberMotiv);
 
 $("m-karte").onchange=function(e){ loadMapImage(e.target.files[0]); e.target.value=""; };
 $("m-karte-del").onclick=function(){ S.meta.karte=""; update(); };
+$("m-logo").onchange=function(e){ loadImage(e.target.files[0],"logo",500,"image/png","Logo übernommen"); e.target.value=""; };
+$("m-logo-del").onclick=function(){ S.meta.logo=""; update(); toast("Logo entfernt"); };
 $("p-plus").onclick=addPerson;
 $("p-minus").onclick=function(){ if(S.personen.length) removePerson(S.personen[S.personen.length-1].id); };
-$("shot-add").onclick=function(){ S.shots.push({id:uid(),name:"",dauer:30,umbau:"licht",personen:[]}); renderShots(); update(); };
+$("shot-add").onclick=function(){ S.shots.push({id:uid(),name:"",dauer:30,umbau:"licht",personen:[],notiz:""}); renderShots(); update(); };
 
 renderBookList();
 full();
